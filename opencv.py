@@ -3,6 +3,14 @@ import cv2
 import numpy
 import math
 
+from time import sleep
+
+from messages_helper import connectToMqtt
+from messages_helper import isConnected
+from messages_helper import moveTo
+from messages_helper import lineTo
+from messages_helper import clear
+
 def toRadians(value):
 	return value / 180 * math.pi
 
@@ -98,7 +106,7 @@ def drawPoint(a1, a2):
 	# Point start = lastx == -1 ? Point(x, y) : Point(lastx, lasty);
 
 	# //TODO;tutaj
-	# sendLineTo(x, y);
+	lineTo(x, y);
 	
 	point = int(x), int(y)
 	
@@ -124,11 +132,18 @@ def handle_quit(delay=10):
 
 print('Starting WALLe cameras')
 
+connectToMqtt('iot.eclipse.org')
+
+print("MQTT: Waiting for connection ", end="")
+while (isConnected() == False):
+    print(".", end="")
+    sleep(0.1)
+
 cv2.namedWindow('HDR')
 cv2.namedWindow('Video')
 cv2.namedWindow('Table')
 
-capture = setup_camera_capture(0)
+capture = setup_camera_capture(1)
 
 while True:
     success, frame = capture.read()
