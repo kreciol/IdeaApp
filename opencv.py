@@ -71,6 +71,49 @@ def track(frame):
 
     return -1
 
+def drawPoint(a1, a2):
+	x1 = 0.0
+	y1 = 512.0
+	x2 = 512.0
+	y2 = 512.0
+
+	alfa1 = 180.0 - (67.309 - getCameraAngle(a1))
+	alfa2 = getCameraAngle(a2)
+
+	print("alfa1: {}, alfa2: {}".format(alfa1,alfa2))
+
+	tan1 = math.tan(toRadians(alfa1))
+	tan2 = math.tan(toRadians(alfa2))
+
+	b1 = y1 - tan1*x1
+	b2 = y2 - tan2*x2
+
+	x = (b2 - b1) / (tan1 - tan2)
+	y = tan1*x + b1
+
+	y = 512.0 - y
+	#print("x: {}, y: {}".format(x,y))
+	# //table = Mat(512, 512, CV_8U);
+
+	# Point start = lastx == -1 ? Point(x, y) : Point(lastx, lasty);
+
+	# //TODO;tutaj
+	# sendLineTo(x, y);
+	
+	point = int(x), int(y)
+	
+	image = numpy.zeros((512, 512, 3), numpy.uint8)
+	image[:] = (255, 255, 255)
+	cv2.circle(image,  point,  2, (0, 0, 0), 2)
+	cv2.imshow('Table', image)
+	# line(table, start, Point(x, y), Scalar(0, 255, 0));
+	# //circle(table, Point(x, y), 1, Scalar(0, 255, 0), 1);
+	# //putText(table,  "A1: " + to_string(int(alfa1)) + " A2: " + to_string(int(alfa2)), Point(0, 50), 2, 1, Scalar(0, 255, 0), 2);
+	# imshow("table", table);
+
+	# lastx = x;
+	# lasty = y;
+	return -1
 
 def handle_quit(delay=10):
     """Quit the program if the user presses "Esc" or "q"."""
@@ -83,6 +126,7 @@ print('Starting WALLe cameras')
 
 cv2.namedWindow('HDR')
 cv2.namedWindow('Video')
+cv2.namedWindow('Table')
 
 capture = setup_camera_capture(0)
 
@@ -97,8 +141,7 @@ while True:
 
     a = track(laser)
 
-    angle = getCameraAngle(a)
-    print(angle)
+    drawPoint(a, a)
 
     cv2.imshow('Video', frame)
     cv2.imshow('HDR', laser)
