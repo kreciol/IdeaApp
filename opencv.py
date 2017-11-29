@@ -10,6 +10,11 @@ from messages_helper import isConnected
 from messages_helper import moveTo
 from messages_helper import lineTo
 from messages_helper import clear
+table_width = 512
+table_height = 512
+camera_width = 1280
+camera_height = 720
+camera_max_angle = 67.309
 
 def toRadians(value):
 	return value / 180 * math.pi
@@ -20,10 +25,10 @@ def toDeg(value):
 
 
 def getCameraAngle(value):
-	virtualCameraConeBottomAngle = (180.0 - 67.309) / 2.0
+	virtualCameraConeBottomAngle = (180.0 - camera_max_angle) / 2.0
 	virtualCameraConeBottomAngleRad = toRadians(virtualCameraConeBottomAngle)
 	virtualCameraConeBottomLength = 1.084
-	detectedPointPositionOnVirtualCameraCone = value / 1280.0 * virtualCameraConeBottomLength
+	detectedPointPositionOnVirtualCameraCone = value / camera_width * virtualCameraConeBottomLength
 
 	topFormula = math.sin(virtualCameraConeBottomAngleRad) * detectedPointPositionOnVirtualCameraCone
 	bottomFormula = math.sqrt(1 + math.pow(detectedPointPositionOnVirtualCameraCone, 2) - (2 * math.cos(virtualCameraConeBottomAngleRad) * detectedPointPositionOnVirtualCameraCone))
@@ -36,8 +41,8 @@ def setup_camera_capture(device):
         sys.stderr.write("Faled to Open Capture device. Quitting.\n")
         sys.exit(1)
 
-    capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    capture.set(cv2.CAP_PROP_FRAME_WIDTH, camera_width)
+    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
     capture.set(cv2.CAP_PROP_BRIGHTNESS, 30.0)
     capture.set(cv2.CAP_PROP_CONTRAST, 5.0)
     capture.set(cv2.CAP_PROP_SATURATION, 200.0)
@@ -50,8 +55,13 @@ def threshold_image(channel, minimum, maximum):
 
     return tmp2
 
+def dilate(frame):
+    dilateElement = numpy.ones((8,8), numpy.uint8)
+
+    return cv2.dilate(frame, dilateElement, iterations=2)
+
 def detect(frame):
-    hsv_img = cv2.cvtColor(frame[300:320, 0:1280], cv2.COLOR_BGR2HSV)
+    hsv_img = cv2.cvtColor(frame[300:320, 0:camera_width], cv2.COLOR_BGR2HSV)
 
     # split the video frame into color channels
     h, s, v = cv2.split(hsv_img)
@@ -61,6 +71,10 @@ def detect(frame):
     h = cv2.bitwise_not(h)
     s = threshold_image(s, 100, 255)
     v = threshold_image(v, 120, 256)
+
+    h = dilate(h)
+    s = dilate(s)
+    v = dilate(v)
 
     # Perform an AND on HSV components to identify the laser!
     laser = cv2.bitwise_and(h, v)
@@ -75,7 +89,8 @@ def track(frame):
         countour = max(countours, key=cv2.contourArea)
         moments = cv2.moments(countour)
         
-        return int(moments["m10"] / moments["m00"])
+        if  moments["m00"] > 0:
+            return int(moments["m10"] / moments["m00"])
 
     return -1
 
@@ -85,10 +100,8 @@ def drawPoint(a1, a2):
 	x2 = 512.0
 	y2 = 512.0
 
-	alfa1 = 180.0 - (67.309 - getCameraAngle(a1))
+	alfa1 = 180.0 - (camera_max_angle - getCameraAngle(a1))
 	alfa2 = getCameraAngle(a2)
-
-	print("alfa1: {}, alfa2: {}".format(alfa1,alfa2))
 
 	tan1 = math.tan(toRadians(alfa1))
 	tan2 = math.tan(toRadians(alfa2))
@@ -100,28 +113,27 @@ def drawPoint(a1, a2):
 	y = tan1*x + b1
 
 	y = 512.0 - y
-	#print("x: {}, y: {}".format(x,y))
-	# //table = Mat(512, 512, CV_8U);
-
-	# Point start = lastx == -1 ? Point(x, y) : Point(lastx, lasty);
 
 	# //TODO;tutaj
-	lineTo(x, y);
+	lineTo(x, y)
 	
 	point = int(x), int(y)
 	
-	image = numpy.zeros((512, 512, 3), numpy.uint8)
-	image[:] = (255, 255, 255)
-	cv2.circle(image,  point,  2, (0, 0, 0), 2)
-	cv2.imshow('Table', image)
-	# line(table, start, Point(x, y), Scalar(0, 255, 0));
-	# //circle(table, Point(x, y), 1, Scalar(0, 255, 0), 1);
-	# //putText(table,  "A1: " + to_string(int(alfa1)) + " A2: " + to_string(int(alfa2)), Point(0, 50), 2, 1, Scalar(0, 255, 0), 2);
-	# imshow("table", table);
+	# image = numpy.zeros((512, 512, 3), numpy.uint8)
+	# image[:] = (255, 255, 255)
+	# cv2.circle(image,  point,  2, (0, 0, 0), 2)
+	# cv2.imshow('Table', image)
 
-	# lastx = x;
-	# lasty = y;
 	return -1
+
+def getFrame(capture):
+    success, frame = capture.read()
+
+    if not success:
+        sys.stderr.write("Could not read camera frame. Quitting\n")
+        sys.exit(1)
+    
+    return frame
 
 def handle_quit(delay=10):
     """Quit the program if the user presses "Esc" or "q"."""
@@ -139,26 +151,27 @@ while (isConnected() == False):
     print(".", end="")
     sleep(0.1)
 
-cv2.namedWindow('HDR')
-cv2.namedWindow('Video')
+cv2.namedWindow('Laser1')
+cv2.namedWindow('Laser2')
 cv2.namedWindow('Table')
 
-capture = setup_camera_capture(1)
+capture1 = setup_camera_capture(0)
+capture2 = setup_camera_capture(1)
 
 while True:
-    success, frame = capture.read()
+    frame1 = getFrame(capture1)
+    frame2 = getFrame(capture2)
 
-    if not success:  # no image captured... end the processing
-        sys.stderr.write("Could not read camera frame. Quitting\n")
-        sys.exit(1)
+    laser1 = detect(frame1)
+    laser2 = detect(frame2)
 
-    laser = detect(frame)
+    cv2.imshow('Laser1', frame1)
+    cv2.imshow('Laser2', frame2)
 
-    a = track(laser)
+    a1 = track(laser1)
+    a2 = track(laser2)
 
-    drawPoint(a, a)
+    drawPoint(a1, a2)
 
-    cv2.imshow('Video', frame)
-    cv2.imshow('HDR', laser)
     handle_quit()
 
